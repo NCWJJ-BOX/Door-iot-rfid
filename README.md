@@ -1,145 +1,70 @@
 # Door IoT RFID System
 
-ระบบควบคุมประตูด้วย RFID และ OTP สำหรับ IoT เป็นโปรเจคชิ้นงานจบปี 1 ที่พัฒนาขึ้นเพื่อศึกษาและพัฒนาระบบ Smart Door โดยใช้ RFID เชื่อมต่อกับ MySQL และระบบ OTP
+Smart door access control system using RFID cards and OTP codes. ESP32 with RFID reader, keypad, LCD, and relay controls a door lock, authenticated via FastAPI backend with MySQL.
 
-## ภาพรวมระบบ
+## Architecture
 
-โปรเจคนี้เป็นระบบควบคุมการเปิด-ปิดประตูอัจฉริยะ โดยสามารถใช้งานได้ 2 รูปแบบ:
+```
+RFID Card / Keypad (OTP)
+        │
+        ▼
+    ESP32 + MFRC522 + LCD + Relay
+        │ HTTP
+        ▼
+  FastAPI Backend + MySQL
+        │
+        ▼
+    Access Logging
+```
 
-1. **RFID Authentication** - ใช้บัตร RFID ในการยืนยันตัวตน
-2. **OTP Authentication** - ใช้รหัส OTP 6 หลักในการเปิดประตู
+## Features
 
-## การทำงานของระบบ
+- RFID card authentication against MySQL database
+- OTP code authentication (6-digit, regenerated every 2 minutes)
+- Web-based door control (open/close via API)
+- Access logging with timestamps
+- LCD display showing time and user info
+- WiFi auto-connect via WiFiManager
+- Auto-close door after timeout
 
-RFID อ่านค่าจากบัตรและส่งไปที่ API เพื่อตรวจสอบที่ Database ว่าตรงกันหรือไม่ เพื่อให้ประตูเปิดหรือปิด นอกจากนี้ยังมีระบบ OTP ที่สุ่มเลข 6 หลักเพื่อให้กรอกที่หน้าประตูได้ สามารถดูหลังบ้านได้ว่ามีใครเข้ามาในห้องบ้าง
+## Tech Stack
 
-## เทคโนโลยีที่ใช้
+- **Backend:** Python FastAPI, MySQL
+- **Firmware:** Arduino (ESP32), C++
+- **Hardware:** MFRC522 RFID, 4x4 keypad (I2C), LCD I2C 16x2, relay module, Hall sensor
 
-- **Backend**: Python FastAPI
-- **Firmware**: Arduino (ESP32)
-- **Database**: MySQL
-- **Hardware**: RFID Reader (MFRC522), Keypad 4x4, LCD I2C, Relay, Hall Sensor
+## Project Structure
 
-## ฟีเจอร์
+```
+Door-iot-rfid/
+├── Arduino_final_Project.ino   # ESP32 firmware
+├── fast_api.py                 # FastAPI backend API
+└── README.md
+```
 
-- ระบบยืนยันตัวตนด้วย RFID Card
-- ระบบ OTP สุ่มรหัด 6 หลัก อัปเดตทุก 2 นาที (สุ่มใหม่ทุกครั้งที่มีการใช้ไปแล้ว)
-- ควบคุมการเปิด-ปิดประตูผ่านเว็บไซต์
-- บันทึกประวัติการเข้าใช้งาน (Log)
-- แสดงเวลาปัจจุบันบน LCD
+## Setup
 
-## หน้าจอผู้ดูแลระบบ
-
-![Admin Interface](./Screenshot%202024-08-02%20132434.png)
-
-สามารถเพิ่ม ลบ แก้ไข ได้และเปิด/ปิด บัตรแต่ละใบได้
-
-![Admin Interface](./Screenshot%202024-08-02%20132444.png)
-
-มีปุ่มเปิดประตูจากหน้าเว็บได้เลยสำหรับผู้ดูแล
-
-## ประวัติการเข้าใช้งาน
-
-![Access Log](./Screenshot%202024-08-02%20132858.png)
-
-สามารถตรวจสอบได้ว่าใครเข้ามาในห้องบ้างพร้อม timestamp
-
-## การติดตั้ง
-
-### 1. Backend
+### Backend
 
 ```bash
-# ติดตั้ง dependencies
 pip install fastapi uvicorn mysql-connector-python
-
-# แก้ไขการตั้งค่า Database ใน fast_api.py
-MYSQL_CONFIG = {
-    "host": "localhost",
-    "user": "your_username",
-    "password": "your_password",
-    "database": "your_database",
-    "autocommit": True,
-}
-
-# รัน server
 uvicorn fast_api:app --reload
 ```
 
-### 2. Database
+### Firmware
 
-สร้างตารางที่จำเป็น:
+1. Open `Arduino_final_Project.ino` in Arduino IDE
+2. Configure WiFi SSID/password and API endpoint URL
+3. Flash to ESP32
 
-```sql
--- ตารางผู้ใช้งาน RFID
-CREATE TABLE esp32 (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    rfid VARCHAR(255) UNIQUE,
-    pin VARCHAR(255),
-    user VARCHAR(255)
-);
+## Hardware Wiring
 
--- ตาราง OTP
-CREATE TABLE otp (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    otp VARCHAR(6),
-    timestamp DATETIME
-);
-
--- ตารางบันทึกการเข้าใช้
-CREATE TABLE access_log (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    rfid VARCHAR(255),
-    status VARCHAR(50),
-    timestamp DATETIME
-);
-```
-
-### 3. Arduino
-
-เปิดไฟล์ `Arduino_final_Project.ino` ใน Arduino IDE และแก้ไขค่า:
-
-```cpp
-const char* API_ENDPOINT = "https://your-api-domain/rfid";
-const char* FAST_API_URL = "https://your-fastapi-domain";
-const char* SERVER_URL = "https://your-server-domain/get_otp_api";
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/rfid` | ตรวจสอบ RFID |
-| POST | `/check_code` | ตรวจสอบ OTP |
-| GET | `/update_data/{value}` | ควบคุมประตู (0=lock, 1=unlock) |
-| GET | `/get_otp_api` | สถานะประตูปัจจุบัน |
-| GET | `/health` | Health check |
-
-## การใช้งาน
-
-### การเปิดประตูด้วย RFID
-1. แตะบัตร RFID ที่เครื่องอ่าน
-2. ระบบจะส่ง RFID ไปตรวจสอบที่ API
-3. หากถูกต้อง ประตูจะเปิดและแสดงข้อมูลผู้ใช้บน LCD
-
-### การเปิดประตูด้วย OTP
-1. กดปุ่ม 'C' บน keypad เพื่อเข้าโหมด OTP
-2. กรอกรหัส OTP 6 หลัก
-3. หากถูกต้อง ประตูจะเปิด
-
-### การเปิดประตูผ่านเว็บ
-- เรียก `GET /update_data/1` เพื่อเปิดประตู
-- เรียก `GET /update_data/0` เพื่อปิดประตู
-
-## ไฟล์ในโปรเจค
-
-```
-.
-├── Arduino_final_Project.ino   # Firmware สำหรับ ESP32
-├── fast_api.py                 # Backend API
-├── README.md                   # เอกสารนี้
-└── Screenshot*.png             # ภาพตัวอย่างหน้าจอ
-```
-
-## License
-
-MIT License
+| Component | ESP32 Pin |
+|-----------|-----------|
+| MFRC522 SDA | GPIO 5 |
+| MFRC522 SCK | GPIO 18 |
+| MFRC522 MOSI | GPIO 23 |
+| MFRC522 MISO | GPIO 19 |
+| Relay | GPIO 26 |
+| LCD I2C | SDA/SCL |
+| Keypad I2C | SDA/SCL |
